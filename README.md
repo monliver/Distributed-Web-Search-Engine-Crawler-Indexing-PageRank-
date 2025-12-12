@@ -2,6 +2,7 @@
 
 This repo contains a distributed search engine with self-designed KVS system for storage and Flame service for data processing. 
 Demo Video from Youtube: https://youtu.be/ObH-JEvb5gU
+
 <img width="500" height="392" alt="Screenshot 2025-12-12 at 12 02 59 PM" src="https://github.com/user-attachments/assets/33ecb0ff-9e0c-4d09-bba1-d910ebd27116" />
 
 
