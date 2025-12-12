@@ -2,7 +2,8 @@
 
 This repo contains a distributed search engine with self-designed KVS system for storage and Flame service for data processing. 
 Demo Video from Youtube: https://youtu.be/ObH-JEvb5gU
-<img width="1014" height="382" alt="Screenshot 2025-12-12 at 12 00 14 PM" src="https://github.com/user-attachments/assets/e076404b-a966-4795-adff-ef5f1521c75f" />
+<img width="996" height="392" alt="Screenshot 2025-12-12 at 12 02 59 PM" src="https://github.com/user-attachments/assets/33ecb0ff-9e0c-4d09-bba1-d910ebd27116" />
+
 
 ## Build & Run (via build.sh)
 We have developed an all-in-one deployment service -- `ci_cd/build.sh` for 
