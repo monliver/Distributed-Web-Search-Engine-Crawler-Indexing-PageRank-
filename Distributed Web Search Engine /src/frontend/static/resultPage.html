@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MegaSearch - {{query}}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .weather-emoji {
+            font-size: 20px;
+            line-height: 1;
+            margin-left: 4px; 
+            vertical-align: -2px;
+        }
+    </style>
+    <!-- Firebase v8 -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+</head>
+<body class="results-page results-layout">
+
+    <!-- Top-right: login + weather in one fixed panel -->
+    <div id="top-right-panel"
+         style="
+            position: fixed;
+            top: 18px;
+            right: 26px;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+         ">
+
+        <!-- Row 1: login area -->
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span id="welcome-text" class="welcome-text" style="display:none;"></span>
+            <button id="login-btn" class="login-btn">Sign in with Google</button>
+            <button id="logout-btn" class="login-btn" style="display:none;">Logout</button>
+            <img id="user-avatar"
+                crossorigin="anonymous"
+                referrerpolicy="no-referrer"
+                style="
+                    display:none;
+                    border-radius:50%;
+                    width:40px;
+                    height:40px;
+                    object-fit:cover;
+                    background:transparent;
+                "
+                onerror="
+                    this.src='';
+                    this.style.display='none';
+                    this.style.background='transparent';
+                ">
+
+        </div>
+
+        <!-- Row 2: weather bar (always visible) -->
+        <div
+            id="weather-bar"
+            style="
+                min-width: 260px;
+                max-width: 420px;
+                height: 30px;
+                border-radius: 16px;
+                background: rgba(151, 206, 223, 0.85);
+                color: #01090b;
+                display: flex;
+                align-items: center;
+                overflow: hidden;
+                padding: 0 12px;
+                box-sizing: border-box;
+                font-size: 15px;
+            ">
+            <div id="weather-marquee"
+                style="
+                    white-space: nowrap;
+                    will-change: transform;
+                ">
+                Loading weather...
+            </div>
+        </div>
+    </div>
+
+    <!-- Main header: logo + search bar -->
+    <div class="search-container">
+        <div class="search-header">
+            <h1 class="logo">
+                <a href="/">
+                    <span class="letter-m">M</span>
+                    <span class="letter-e">e</span>
+                    <span class="letter-g">g</span>
+                    <span class="letter-a">a</span>
+                    <span class="search-text">Search</span>
+                </a>
+            </h1>
+
+            <!-- Hidden PDF input -->
+            <input type="file"
+                   id="pdf-input-result"
+                   accept="application/pdf"
+                   style="display:none;">
+
+            <form id="search-form-result"
+                  action="/search"
+                  method="GET"
+                  class="search-form"
+                  autocomplete="off">
+                <div class="search-input-wrapper">
+                    <input
+                        id="result-query-input"
+                        type="text"
+                        name="query"
+                        class="search-box"
+                        value="{{query}}"
+                    />
+                    <div id="result-suggest-box" class="suggest-box"></div>
+                </div>
+
+                <!-- Geo params filled by JS -->
+                <input type="hidden" name="lat" id="geo-lat-result">
+                <input type="hidden" name="lon" id="geo-lon-result">
+
+                <input type="submit" value="Search" class="search-button" />
+
+                <button type="button"
+                        id="upload-btn-result"
+                        class="icon-circle-btn"
+                        title="Document input for search">
+                    📄
+                </button>
+
+                <button type="button"
+                        id="voice-btn-result"
+                        class="icon-circle-btn"
+                        title="Voice input for search">
+                    🎤
+                </button>
+            </form>
+
+            <!-- Spellcheck suggestion area -->
+            <div class="didyoumean-container" id="dym-container">
+                {{didyoumean}}
+            </div>
+
+            <hr>
+        </div>
+    </div>
+
+    <!-- Results area -->
+    <div
+        id="results-wrapper"
+        class="results-wrapper"
+        data-query="{{query}}"
+        data-diag="{{diagMode}}"
+    >
+        <div class="summary-line">{{summary}}</div>
+
+        <div id="results-list">
+            {{results}}
+        </div>
+
+        <hr>
+
+        <!-- Load More button -->
+        <div id="load-more-container" style="text-align:center; margin: 24px 0 40px;">
+            <button id="load-more-btn" class="load-more-button">
+                Load More Results
+            </button>
+        </div>
+    </div>
+
+    <!-- Firebase login -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyA6hOB5fduBLfnMfXsCOGtx76NMz8FUKvA",
+            authDomain: "megasearch-dcb0c.firebaseapp.com",
+            projectId: "megasearch-dcb0c",
+            storageBucket: "megasearch-dcb0c.firebasestorage.app",
+            messagingSenderId: "542854449232",
+            appId: "1:542854449232:web:978417854659bc7544e955",
+            measurementId: "G-JHE1HB9N2Y"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+
+        function applyUser(user) {
+            const welcomeEl = document.getElementById("welcome-text");
+            const loginBtn  = document.getElementById("login-btn");
+            const logoutBtn = document.getElementById("logout-btn");
+            const avatar    = document.getElementById("user-avatar");
+
+            if (user) {
+                loginBtn.style.display  = "none";
+                logoutBtn.style.display = "inline-block";
+                welcomeEl.textContent   = "Welcome, " + (user.displayName || user.email || "");
+                welcomeEl.style.display = "inline-block";
+            if (user.photoURL) {
+                console.log("AVATAR URL:", user.photoURL);
+                avatar.src = user.photoURL;
+                avatar.style.display = "inline-block";
+            } else {
+                    avatar.style.display = "none";
+                }
+            } else {
+                welcomeEl.style.display = "none";
+                loginBtn.style.display  = "inline-block";
+                logoutBtn.style.display = "none";
+                avatar.style.display    = "none";
+            }
+        }
+
+        function signIn() {
+            if (!auth) {
+                alert("Auth not initialized.");
+                return;
+            }
+            const provider = new firebase.auth.GoogleAuthProvider();
+            provider.addScope("profile");
+            provider.addScope("email");
+
+            auth.signInWithPopup(provider).then(result => {
+                const user = result.user;
+                localStorage.setItem("megaSearchUser", JSON.stringify({
+                    name:     user.displayName,
+                    email:    user.email,
+                    photoURL: user.photoURL
+                }));
+                applyUser(user);
+            }).catch(err => {
+                alert("Sign-in failed: " + (err.message || "Please try again."));
+            });
+        }
+
+        function signOut() {
+            auth.signOut().then(() => {
+                localStorage.removeItem("megaSearchUser");
+                applyUser(null);
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const stored = localStorage.getItem("megaSearchUser");
+            if (stored) {
+                try {
+                    const u = JSON.parse(stored);
+                    applyUser({
+                        displayName: u.name,
+                        email:       u.email,
+                        photoURL:    u.photoURL
+                    });
+                } catch (e) {}
+            }
+
+            const loginBtn  = document.getElementById("login-btn");
+            const logoutBtn = document.getElementById("logout-btn");
+            if (loginBtn)  loginBtn.addEventListener("click", signIn);
+            if (logoutBtn) logoutBtn.addEventListener("click", signOut);
+        });
+    </script>
+
+    <!-- Suggestion + history -->
+    <script>
+        const HISTORY_KEY = "megaSearchHistory";
+
+        function loadSearchHistory() {
+            try {
+                const raw = localStorage.getItem(HISTORY_KEY);
+                if (!raw) return [];
+                const arr = JSON.parse(raw);
+                return Array.isArray(arr) ? arr : [];
+            } catch (e) {
+                console.warn("loadSearchHistory failed", e);
+                return [];
+            }
+        }
+
+        function saveSearchHistory(q) {
+            try {
+                if (!q) return;
+                let arr = loadSearchHistory();
+                arr = arr.filter(item => item !== q);
+                arr.unshift(q);
+                if (arr.length > 10) arr = arr.slice(0, 10);
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(arr));
+            } catch (e) {
+                console.warn("saveSearchHistory failed", e);
+            }
+        }
+
+        (function () {
+            function setupSuggest(inputId, boxId) {
+                const input = document.getElementById(inputId);
+                const box   = document.getElementById(boxId);
+                if (!input || !box) return;
+
+                function renderHistory() {
+                    const history = loadSearchHistory();
+                    if (!history || history.length === 0) {
+                        box.style.display = "none";
+                        return;
+                    }
+                    box.innerHTML = "";
+                    history.forEach(q => {
+                        const div = document.createElement("div");
+                        div.textContent = q + "  (History)";
+                        div.addEventListener("click", () => {
+                            input.value = q;
+                            box.style.display = "none";
+                            const trimmed = q.trim();
+                            if (trimmed) saveSearchHistory(trimmed);
+                            input.form && input.form.submit();
+                        });
+                        box.appendChild(div);
+                    });
+                    box.style.display = "block";
+                }
+
+                async function updateSuggestions() {
+                    const prefix = input.value.trim();
+                    if (!prefix) {
+                        renderHistory();
+                        return;
+                    }
+
+                    try {
+                        const resp = await fetch("/suggest?prefix=" + encodeURIComponent(prefix));
+                        const arr  = await resp.json();
+                        if (!arr || arr.length === 0) {
+                            box.style.display = "none";
+                            return;
+                        }
+
+                        box.innerHTML = "";
+                        arr.forEach(word => {
+                            const div = document.createElement("div");
+                            div.textContent = word;
+                            div.addEventListener("click", () => {
+                                input.value = word;
+                                box.style.display = "none";
+                                const q = word.trim();
+                                if (q) saveSearchHistory(q);
+                                input.form && input.form.submit();
+                            });
+                            box.appendChild(div);
+                        });
+                        box.style.display = "block";
+                    } catch (e) {
+                        box.style.display = "none";
+                    }
+                }
+
+                input.addEventListener("input", updateSuggestions);
+                input.addEventListener("focus", updateSuggestions);
+
+                document.addEventListener("click", (e) => {
+                    if (e.target !== input && !box.contains(e.target)) {
+                        box.style.display = "none";
+                    }
+                });
+            }
+
+            setupSuggest("result-query-input", "result-suggest-box");
+        })();
+    </script>
+
+    <!-- Geo -->
+    <script>
+        const GEO_KEY = "megaSearchGeo";
+
+        function applyGeoToInputs(lat, lon) {
+            const latInput = document.getElementById("geo-lat-result");
+            const lonInput = document.getElementById("geo-lon-result");
+            if (latInput) latInput.value = lat;
+            if (lonInput) lonInput.value = lon;
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            try {
+                const stored = localStorage.getItem(GEO_KEY);
+                if (stored) {
+                    const obj = JSON.parse(stored);
+                    if (obj && obj.lat && obj.lon) {
+                        applyGeoToInputs(obj.lat, obj.lon);
+                    }
+                }
+            } catch (e) {
+                console.warn("parse geo from localStorage failed", e);
+            }
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const lat = pos.coords.latitude.toFixed(6);
+                        const lon = pos.coords.longitude.toFixed(6);
+                        localStorage.setItem(GEO_KEY, JSON.stringify({ lat, lon }));
+                        applyGeoToInputs(lat, lon);
+                    },
+                    (err) => {
+                        console.log("Geolocation error:", err && err.message);
+                    },
+                    {
+                        enableHighAccuracy: false,
+                        timeout: 5000,
+                        maximumAge: 600000
+                    }
+                );
+            }
+        });
+    </script>
+
+    <!-- Load-more -->
+    <script>
+        (function () {
+            let currentPage = parseInt("{{currentPage}}") || 1;
+            let totalPages  = parseInt("{{totalPages}}") || 1;
+            let loading = false;
+
+            const btn     = document.getElementById("load-more-btn");
+            const wrapper = document.getElementById("results-wrapper");
+            const list    = document.getElementById("results-list");
+            if (!btn || !wrapper || !list) return;
+
+            const query   = wrapper.getAttribute("data-query") || "";
+            const diagAttr = wrapper.getAttribute("data-diag") || "false";
+            const diagMode = (diagAttr === "true");
+
+            function updateButtonVisibility() {
+                if (currentPage < totalPages) {
+                    btn.style.display = "inline-block";
+                } else {
+                    btn.style.display = "none";
+                }
+            }
+
+            updateButtonVisibility();
+
+            btn.addEventListener("click", async () => {
+                if (loading) return;
+                if (currentPage >= totalPages) return;
+
+                loading = true;
+                btn.innerText = "Loading...";
+
+                const latInput = document.getElementById("geo-lat-result");
+                const lonInput = document.getElementById("geo-lon-result");
+                const lat = latInput && latInput.value ? "&lat=" + encodeURIComponent(latInput.value) : "";
+                const lon = lonInput && lonInput.value ? "&lon=" + encodeURIComponent(lonInput.value) : "";
+                const diag = diagMode ? "&diag=true" : "";
+
+                const url =
+                    "/search?ajax=1&page=" + (currentPage + 1) +
+                    "&query=" + encodeURIComponent(query) +
+                    lat + lon + diag;
+
+                try {
+                    const resp = await fetch(url);
+                    const html = await resp.text();
+                    currentPage++;
+                    list.insertAdjacentHTML("beforeend", html);
+                } catch (e) {
+                    console.error("Load more error:", e);
+                }
+
+                btn.innerText = "Load More Results";
+                loading = false;
+                updateButtonVisibility();
+            });
+        })();
+    </script>
+
+    <!-- PDF upload + Gemini + Voice -->
+    <script>
+        const pdfjsLib = window["pdfjsLib"];
+        if (pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc =
+                "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js";
+        }
+
+        const GEMINI_API_KEY = "AIzaSyCj1VuhymAi5Pe8qgzw4pG7LCOiXNPU3v4";
+
+        async function extractTextFromPDFResult(file) {
+            if (!pdfjsLib) {
+                throw new Error("PDF library not loaded.");
+            }
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+            let text = "";
+            const maxPages = Math.min(pdf.numPages, 5);
+            for (let p = 1; p <= maxPages; p++) {
+                const page = await pdf.getPage(p);
+                const content = await page.getTextContent();
+                text += content.items.map(i => i.str).join(" ") + " ";
+            }
+            return text.trim().slice(0, 2000);
+        }
+
+        async function getKeywordsFromLLMResult(text) {
+            const body = {
+                contents: [{
+                    parts: [{
+                        text:
+                            "Extract EXACTLY 3 meaningful ENGLISH keywords from the text below.\n" +
+                            "- Do NOT include ANY stopwords (e.g., the, a, an, of, and, or, in, to, for, on).\n" +
+                            "- Use only content words such as nouns or important verbs.\n" +
+                            "- No punctuation, no quotes, no explanations.\n" +
+                            "- Return ONLY 3 keywords separated by SINGLE SPACES.\n\n" +
+                            text
+                    }]
+                }]
+            };
+
+            const resp = await fetch(
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + GEMINI_API_KEY,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                }
+            );
+
+            const data = await resp.json();
+            const raw = (data && data.candidates && data.candidates[0] &&
+                data.candidates[0].content &&
+                data.candidates[0].content.parts &&
+                data.candidates[0].content.parts[0].text) || "";
+            return raw;
+        }
+
+        function normalizeToThreeWords(rawText, fallbackSourceText) {
+            if (!rawText && !fallbackSourceText) return "";
+            let base = rawText && rawText.trim() ? rawText : (fallbackSourceText || "");
+            const words = base.trim().split(/\s+/).filter(Boolean);
+            if (words.length === 0) return "";
+            const top3 = words.slice(0, 3);
+            while (top3.length < 3 && words.length > 0) {
+                top3.push(words[0]);
+            }
+            return top3.join(" ");
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const uploadBtn  = document.getElementById("upload-btn-result");
+            const pdfInput   = document.getElementById("pdf-input-result");
+            const queryInput = document.getElementById("result-query-input");
+            const form       = document.getElementById("search-form-result");
+
+            if (form && queryInput) {
+                form.addEventListener("submit", () => {
+                    const q = (queryInput.value || "").trim();
+                    if (q) saveSearchHistory(q);
+                });
+            }
+
+            if (uploadBtn && pdfInput && queryInput && form) {
+                uploadBtn.addEventListener("click", () => pdfInput.click());
+
+                pdfInput.addEventListener("change", async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    const loadingBox = document.createElement("div");
+                    loadingBox.innerText = "Processing with LLM...";
+                    loadingBox.style =
+                        "position:fixed;top:40%;left:50%;transform:translateX(-50%);" +
+                        "padding:20px 36px;font-size:20px;border-radius:14px;" +
+                        "background:rgba(255,255,255,0.9);box-shadow:0 0 18px rgba(0,0,0,0.25);" +
+                        "backdrop-filter:blur(12px);z-index:9999;";
+                    document.body.appendChild(loadingBox);
+
+                    try {
+                        const text = await extractTextFromPDFResult(file);
+                        const rawKeywords = await getKeywordsFromLLMResult(text);
+                        const keywords = normalizeToThreeWords(rawKeywords, text);
+                        queryInput.value = keywords;
+                    } catch (err) {
+                        console.error(err);
+                        alert("PDF processing failed.");
+                    }
+
+                    setTimeout(() => {
+                        const q = (queryInput.value || "").trim();
+                        if (q) saveSearchHistory(q);
+                        loadingBox.remove();
+                        form.submit();
+                    }, 2000);
+                });
+            }
+
+            const voiceBtn = document.getElementById("voice-btn-result");
+            if (voiceBtn && queryInput && form) {
+                const SpeechRecognition =
+                    window.SpeechRecognition || window.webkitSpeechRecognition;
+
+                if (!SpeechRecognition) {
+                    voiceBtn.style.display = "none";
+                } else {
+                    const recognition = new SpeechRecognition();
+                    recognition.lang = "en-US";
+                    recognition.interimResults = false;
+
+                    voiceBtn.addEventListener("click", () => {
+                        recognition.start();
+                    });
+
+                    recognition.addEventListener("result", (event) => {
+                        const transcript = Array.from(event.results)
+                            .map(r => r[0].transcript)
+                            .join(" ");
+                        queryInput.value = transcript;
+                        const q = transcript.trim();
+                        if (q) saveSearchHistory(q);
+                        form.submit();
+                    });
+
+                    recognition.addEventListener("error", (event) => {
+                        console.error("Speech recognition error:", event.error);
+                    });
+                }
+            }
+        });
+    </script>
+
+    <!-- Weather: US ZIP -> OpenWeather 3-day forecast -->
+    <script>
+        (function () {
+            const OPENWEATHER_KEY = "ff8b3699814108d76345082896851517";
+
+            function isZipCode(str) {
+                if (!str) return false;
+                return /^\d{5}$/.test(str.trim());
+            }
+
+            function getCurrentQuery() {
+                const input = document.getElementById("result-query-input");
+                if (!input) return null;
+                return input.value || "";
+            }
+
+            async function fetchForecastByZip(zip) {
+                const url =
+                    "https://api.openweathermap.org/data/2.5/forecast" +
+                    "?zip=" + encodeURIComponent(zip) + ",us" +
+                    "&appid=" + OPENWEATHER_KEY +
+                    "&units=imperial";
+                const resp = await fetch(url);
+                if (!resp.ok) {
+                    throw new Error("OpenWeather HTTP " + resp.status);
+                }
+                return resp.json();
+            }
+
+            function weatherEmoji(code) {
+                if (code >= 200 && code < 300) return "⛈️";        // Thunderstorm
+                if (code >= 300 && code < 400) return "🌦️";        // Drizzle
+                if (code >= 500 && code < 600) return "🌧️";        // Rain
+                if (code >= 600 && code < 700) return "❄️";        // Snow
+                if (code >= 700 && code < 800) return "🌫️";        // Mist / Fog
+                if (code === 800) return "☀️";                     // Clear
+                if (code === 801) return "🌤️";                    // Few clouds
+                if (code === 802) return "⛅️";                     // Broken clouds
+                if (code === 803 || code === 804) return "☁️";     // Cloudy
+                return "🌡️";                                      // fallback
+            }
+
+            function buildThreeDayText(zip, data) {
+                if (!data || !data.list || !data.list.length) {
+                    return "No forecast data for " + zip;
+                }
+
+                const byDate = {};
+                const byCode = {};
+
+                data.list.forEach(item => {
+                    const dt = new Date(item.dt * 1000);
+                    const dateStr = dt.toISOString().slice(0, 10);
+                    const t = item.main?.temp;
+                    const code = item.weather?.[0]?.id;
+
+                    if (!t || !code) return;
+
+                    if (!byDate[dateStr]) {
+                        byDate[dateStr] = { min: t, max: t };
+                        byCode[dateStr] = code;     // pick first code of the day
+                    } else {
+                        if (t < byDate[dateStr].min) byDate[dateStr].min = t;
+                        if (t > byDate[dateStr].max) byDate[dateStr].max = t;
+                    }
+                });
+
+                const allDates = Object.keys(byDate).sort();
+                const first3 = allDates.slice(0, 3);
+                if (!first3.length) {
+                    return "No forecast data for " + zip;
+                }
+
+                const parts = first3.map(d => {
+                    const v = byDate[d];
+                    const hi = Math.round(v.max);
+                    const lo = Math.round(v.min);
+                    const emoji = weatherEmoji(byCode[d]);
+                    return `${d} <span class="weather-emoji">${emoji}</span> High ${hi}°F Low ${lo}°F`;
+
+
+
+                });
+
+                const cityName = data.city?.name || "ZIP " + zip;
+                return cityName + " (" + zip + "): " + parts.join("  |  ");
+            }
+
+
+            function setMarqueeText(text) {
+                const inner = document.getElementById("weather-marquee");
+                if (!inner) return;
+
+
+                inner.innerHTML = text;
+
+                if (!document.getElementById("weather-marquee-style")) {
+                    const style = document.createElement("style");
+                    style.id = "weather-marquee-style";
+                    style.textContent =
+                        "@keyframes weather-marquee-move {" +
+                        "0% { transform: translateX(100%); }" +
+                        "100% { transform: translateX(-100%); }" +
+                        "}";
+                    document.head.appendChild(style);
+                }
+
+                inner.style.display = "inline-block";
+                inner.style.animation = "weather-marquee-move 18s linear infinite";
+            }
+
+
+            document.addEventListener("DOMContentLoaded", () => {
+                const bar = document.getElementById("weather-bar");
+                const inner = document.getElementById("weather-marquee");
+                if (!bar || !inner) return;
+
+                const q = getCurrentQuery();
+                if (!isZipCode(q)) {
+                    inner.textContent =
+                        "Enter a US ZIP (e.g. 11377) to see 3-day forecast";
+                    return;
+                }
+
+                const zip = q.trim();
+                inner.textContent = "Loading 3-day forecast for " + zip + "...";
+
+                (async () => {
+                    try {
+                        const data = await fetchForecastByZip(zip);
+                        const text = buildThreeDayText(zip, data);
+                        setMarqueeText(text);
+                    } catch (err) {
+                        console.error("[weather] error:", err);
+                        inner.textContent =
+                            "Unable to load weather for " + zip + ".";
+                    }
+                })();
+            });
+        })();
+    </script>
+
+</body>
+</html>

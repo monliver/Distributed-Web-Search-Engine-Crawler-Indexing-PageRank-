@@ -1,0 +1,407 @@
+
+/* Global */
+html, body {
+    height: 100%;
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, sans-serif;
+    background: #ffffff;
+    color: #111;
+}
+
+/* ---------- LOGO ---------- */
+
+.logo {
+    font-weight: 700;
+    display: flex;
+    justify-content: center;
+    flex-wrap: nowrap;
+    margin: 0;
+}
+
+.logo a {
+    text-decoration: none;
+    display: flex;
+    flex-wrap: nowrap;
+}
+
+.logo span {
+    display: inline-block;
+    line-height: 1;
+    margin-right: -2px;
+}
+
+.logo .search-text {
+    margin-right: -5px;
+}
+
+/* Google-style colors */
+.letter-m { color: #4285F4; }
+.letter-e { color: #EA4335; }
+.letter-g { color: #FBBC05; }
+.letter-a { color: #34A853; }
+.search-text { color: #000000; }
+
+/* ---------- Home layout ---------- */
+
+.home-container {
+    text-align: center;
+    margin-top: 140px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Larger logo on home page */
+.home-page .logo {
+    font-size: 90px;
+    margin-bottom: 40px;
+}
+
+/* ---------- Search box + button (shared) ---------- */
+
+.search-form {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+/* Wrapper to hold autocomplete dropdown */
+.search-input-wrapper {
+    position: relative;
+    flex: 1;
+}
+
+/* Text input (home + results) */
+.search-box,
+#home-query-input {
+    width: 55vw;
+    max-width: 780px;
+    min-width: 260px;
+    height: 56px;
+    padding: 0 24px;
+    font-size: 16px;
+    border-radius: 999px;
+    border: none;
+    outline: none;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 22px 55px rgba(15, 35, 95, 0.18);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    transition:
+        box-shadow 0.2s ease,
+        transform 0.2s ease,
+        background 0.2s ease;
+}
+
+.search-box::placeholder,
+#home-query-input::placeholder {
+    color: #b0b0b0;
+}
+
+.search-box:focus,
+#home-query-input:focus {
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 26px 70px rgba(15, 35, 95, 0.28);
+    transform: translateY(-1px);
+}
+
+/* Search button: gradient + hover/active animation */
+.search-button {
+    min-width: 120px;
+    height: 48px;
+    padding: 0 26px;
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    color: #fff;
+    background: linear-gradient(135deg, #4285F4, #34A853);
+    box-shadow:
+        0 12px 30px rgba(66, 133, 244, 0.45),
+        0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    transition:
+        transform 0.16s ease,
+        box-shadow 0.16s ease,
+        filter 0.16s ease;
+}
+
+.search-button:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow:
+        0 18px 45px rgba(66, 133, 244, 0.6),
+        0 0 0 1px rgba(255, 255, 255, 0.7) inset;
+    filter: brightness(1.03);
+}
+
+.search-button:active {
+    transform: translateY(1px) scale(0.97);
+    box-shadow:
+        0 8px 20px rgba(66, 133, 244, 0.45),
+        0 0 0 1px rgba(255, 255, 255, 0.7) inset;
+    filter: brightness(0.97);
+}
+
+/* ---------- Results page header layout + animation ---------- */
+
+.search-container {
+    max-width: 1100px;
+    margin: 40px auto 24px;
+    padding: 0 8%;
+    text-align: center;
+}
+
+/* Slightly smaller logo on results page */
+.results-page .logo {
+    font-size: 60px;
+    margin-bottom: 24px;
+}
+
+/* Results page animation: from home-layout → results-layout */
+.results-page .search-header {
+    transition:
+        margin-top 0.6s ease,
+        transform 0.6s ease;
+}
+
+/* Initial layout: centered like home (first frame) */
+.results-page.home-layout .search-header {
+    margin-top: 140px;
+    transform: scale(1);
+}
+
+/* Target layout: top-aligned + slightly smaller */
+.results-page.results-layout .search-header {
+    margin-top: 28px;
+    transform: scale(0.82);
+}
+
+/* ---------- Autocomplete dropdown ---------- */
+
+.suggest-box {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 6px;
+    background: rgba(255, 255, 255, 0.98);
+    border-radius: 18px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.14);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    z-index: 50;
+    display: none;
+    overflow: hidden;
+}
+
+.suggest-box div {
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.suggest-box div:hover {
+    background: rgba(66, 133, 244, 0.06);
+}
+
+/* ---------- Results list ---------- */
+
+.results-wrapper {
+    max-width: 1100px;
+    margin: 0 auto 40px;
+    padding: 0 12%;
+}
+
+.summary-line {
+    color: #808080;
+    font-size: 0.9em;
+    margin-bottom: 18px;
+}
+
+.result-item {
+    margin-bottom: 20px;
+}
+
+/* Title */
+.result-item h3 {
+    margin: 0 0 4px 0;
+}
+
+.result-item h3 a {
+    text-decoration: none;
+    color: #1a0dab;
+    font-size: 18px;
+}
+
+.result-item h3 a:hover {
+    text-decoration: underline;
+}
+
+/* URL + Cached */
+.result-url {
+    color: #006621;
+    font-size: 14px;
+    margin: 0 0 4px 0;
+}
+
+.result-url a {
+    color: #006621;
+    text-decoration: none;
+}
+
+.result-url a:hover {
+    text-decoration: underline;
+}
+
+.cached-link {
+    margin-left: 8px;
+    color: #1a0dab;
+    font-size: 13px;
+}
+
+/* Snippet */
+.result-snippet {
+    font-size: 14px;
+    color: #545454;
+    margin: 0 0 4px 0;
+    padding-right: 180px;
+}
+
+/* Diagnostic mode */
+.diag-info {
+    font-size: 0.8em;
+    color: #333;
+    background: #f4f4f4;
+    padding: 3px 6px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-bottom: 6px;
+}
+
+/* ---------- Pagination ---------- */
+
+.pagination {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.pagination a,
+.pagination span {
+    margin: 0 5px;
+    text-decoration: none;
+    color: #1a0dab;
+}
+
+.pagination .current-page {
+    font-weight: bold;
+    color: black;
+}
+
+/* ---------- "Did you mean" ---------- */
+
+.didyoumean-container {
+    margin-top: 8px;
+    min-height: 20px;
+}
+
+.didyoumean {
+    font-size: 24px;
+    line-height: 1.5;
+    color: #333;
+    font-weight: 500;
+    text-align: left;
+}
+
+.didyoumean a {
+    color: #1a0dab;
+    text-decoration: none;
+    border-bottom: none;
+}
+
+.didyoumean a:hover {
+    text-decoration: underline;
+}
+
+/* ---------- Load more button (if used) ---------- */
+
+.load-more-button {
+    padding: 10px 24px;
+    border-radius: 999px;
+    border: 1px solid #dcdcdc;
+    background: #f8f9fa;
+    cursor: pointer;
+}
+
+.login-btn {
+    padding: 10px 20px;
+    background: rgba(255,255,255,0.4);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    border: 1px solid #ddd;
+    cursor: pointer;
+    transition: 0.25s;
+}
+
+.login-btn:hover {
+    background: rgba(255,255,255,0.7);
+    transform: scale(1.05);
+}
+
+.welcome-text {
+    font-size: 16px;
+    font-weight: 500;
+}
+
+/* Circle icon buttons (same size as Search button: 48px) */
+.icon-circle-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+
+    /* same gradient as Search button */
+    background: linear-gradient(135deg, #4285F4, #34A853);
+
+    /* glossy + shadow */
+    box-shadow:
+        0 12px 30px rgba(66, 133, 244, 0.35),
+        0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+
+    /* layout */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    font-size: 22px;  /* emoji size */
+    transition: 0.2s ease;
+}
+
+/* Hover animation */
+.icon-circle-btn:hover {
+    transform: translateY(-1px) scale(1.03);
+    box-shadow:
+        0 18px 45px rgba(66, 133, 244, 0.55),
+        0 0 0 1px rgba(255, 255, 255, 0.7) inset;
+}
+
+/* Press effect */
+.icon-circle-btn:active {
+    transform: translateY(1px) scale(0.96);
+    box-shadow:
+        0 6px 16px rgba(66,133,244,0.4),
+        0 0 0 1px rgba(255,255,255,0.6) inset;
+}
+
+
+
+
+
+

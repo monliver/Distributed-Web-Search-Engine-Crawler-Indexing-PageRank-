@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MegaSearch</title>
+    <link rel="stylesheet" href="/static/style.css">
+
+
+
+    <!-- Firebase v8 -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+
+    <!-- PDF.js for reading uploaded PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+</head>
+<body class="home-page">
+
+    <!-- top-right login area -->
+    <div style="position: fixed; top: 18px; right: 26px; z-index: 200; display:flex;align-items:center;gap:10px;">
+        <span id="welcome-text" class="welcome-text" style="display:none;"></span>
+        <button id="login-btn" class="login-btn">Sign in with Google</button>
+        <button id="logout-btn" class="login-btn" style="display:none;">Logout</button>
+        <img id="user-avatar"
+             crossorigin="anonymous"
+             style="display:none; border-radius: 50%; width: 40px; height: 40px; object-fit: cover;">
+    </div>
+
+    <!-- hidden input used for PDF selection -->
+    <input type="file"
+           id="pdf-input"
+           accept="application/pdf"
+           style="display:none;">
+
+    <!-- center logo + search -->
+    <div class="home-container">
+        <h1 class="logo">
+            <span class="letter-m">M</span>
+            <span class="letter-e">e</span>
+            <span class="letter-g">g</span>
+            <span class="letter-a">a</span>
+            <span class="search-text">Search</span>
+        </h1>
+
+        <form id="search-form" action="/search" method="GET" class="search-form" autocomplete="off">
+            <div class="search-input-wrapper">
+                <input
+                    id="home-query-input"
+                    type="text"
+                    name="query"
+                    placeholder="Search the web..."
+                    autofocus>
+                <div id="home-suggest-box" class="suggest-box"></div>
+            </div>
+
+            <input type="submit" value="Search" class="search-button">
+
+            <!-- Upload PDF -->
+            <button type="button"
+                    id="upload-btn"
+                    class="icon-circle-btn"
+                    title="Document input for search">
+                    📄
+            </button>
+
+            <!-- Voice input -->
+            <button type="button"
+                    id="voice-btn"
+                    class="icon-circle-btn"
+                    title="Voice input for search">
+                    🎤
+            </button>
+        </form>
+    </div>
+
+    <!-- Firebase auth + UI state -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyA6hOB5fduBLfnMfXsCOGtx76NMz8FUKvA",
+            authDomain: "megasearch-dcb0c.firebaseapp.com",
+            projectId: "megasearch-dcb0c",
+            storageBucket: "megasearch-dcb0c.firebasestorage.app",
+            messagingSenderId: "542854449232",
+            appId: "1:542854449232:web:978417854659bc7544e955",
+            measurementId: "G-JHE1HB9N2Y"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+
+        const ALLOWED_EMAILS = ["houyitian1994@gmail.com"];
+
+        function applyUser(user) {
+            const welcomeEl = document.getElementById("welcome-text");
+            const loginBtn  = document.getElementById("login-btn");
+            const logoutBtn = document.getElementById("logout-btn");
+            const avatar    = document.getElementById("user-avatar");
+
+            if (user) {
+                loginBtn.style.display  = "none";
+                logoutBtn.style.display = "inline-block";
+                welcomeEl.textContent   = "Welcome, " + (user.displayName || user.email);
+                welcomeEl.style.display = "inline-block";
+
+                if (user.photoURL) {
+                    avatar.src           = user.photoURL;
+                    avatar.style.display = "inline-block";
+                } else {
+                    avatar.style.display = "none";
+                }
+            } else {
+                welcomeEl.style.display = "none";
+                loginBtn.style.display  = "inline-block";
+                logoutBtn.style.display = "none";
+                avatar.style.display    = "none";
+            }
+        }
+
+        function signIn() {
+            if (!auth) {
+                alert("Auth not initialized.");
+                return;
+            }
+            const provider = new firebase.auth.GoogleAuthProvider();
+            provider.addScope("profile");
+            provider.addScope("email");
+
+            auth.signInWithPopup(provider)
+                .then(result => {
+                    const user = result.user;
+                    if (!ALLOWED_EMAILS.includes(user.email)) {
+                        alert("This account is not allowed to sign in.");
+                        return auth.signOut();
+                    }
+                    localStorage.setItem("megaSearchUser", JSON.stringify({
+                        displayName: user.displayName,
+                        email:       user.email,
+                        photoURL:    user.photoURL
+                    }));
+                    applyUser(user);
+                })
+                .catch(err => {
+                    alert("Sign-in failed: " + (err.message || "Please try again."));
+                });
+        }
+
+        function signOut() {
+            auth.signOut().then(() => {
+                localStorage.removeItem("megaSearchUser");
+                applyUser(null);
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const rawUser = localStorage.getItem("megaSearchUser");
+            if (rawUser) {
+                try {
+                    const u = JSON.parse(rawUser);
+                    applyUser({
+                        displayName: u.displayName,
+                        email:       u.email,
+                        photoURL:    u.photoURL
+                    });
+                } catch (e) { /* ignore */ }
+            }
+
+            const loginBtn  = document.getElementById("login-btn");
+            const logoutBtn = document.getElementById("logout-btn");
+            if (loginBtn)  loginBtn.addEventListener("click", signIn);
+            if (logoutBtn) logoutBtn.addEventListener("click", signOut);
+
+            auth.onAuthStateChanged(user => {
+                if (user && ALLOWED_EMAILS.includes(user.email)) {
+                    applyUser(user);
+                }
+            });
+        });
+    </script>
+
+    <!-- history + PDF upload + Gemini LLM -->
+    <script>
+        const HISTORY_KEY = "megaSearchHistory";
+
+        function loadSearchHistory() {
+            try {
+                const raw = localStorage.getItem(HISTORY_KEY);
+                if (!raw) return [];
+                const arr = JSON.parse(raw);
+                return Array.isArray(arr) ? arr : [];
+            } catch (e) {
+                console.warn("loadSearchHistory failed", e);
+                return [];
+            }
+        }
+
+        function saveSearchHistory(q) {
+            try {
+                if (!q) return;
+                let arr = loadSearchHistory();
+                arr = arr.filter(item => item !== q);
+                arr.unshift(q);
+                if (arr.length > 10) arr = arr.slice(0, 10);
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(arr));
+            } catch (e) {
+                console.warn("saveSearchHistory failed", e);
+            }
+        }
+
+        // Configure pdf.js worker
+        const pdfjsLib = window["pdfjsLib"];
+        if (pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc =
+                "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js";
+        }
+
+        const GEMINI_API_KEY = "AIzaSyCj1VuhymAi5Pe8qgzw4pG7LCOiXNPU3v4";
+
+        async function extractTextFromPDF(arrayBuffer) {
+            if (!pdfjsLib) {
+                throw new Error("PDF library not loaded.");
+            }
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = "";
+            const maxPages = Math.min(pdf.numPages, 5);
+            for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const content = await page.getTextContent();
+                fullText += content.items.map(i => i.str).join(" ") + " ";
+            }
+            return fullText.trim().slice(0, 2000);
+        }
+
+        async function getKeywordsFromLLM(text) {
+            const body = {
+                contents: [{
+                    parts: [{
+                        text:
+                            "Extract EXACTLY 3 meaningful keywords from the following text. " +
+                            "Return ONLY the 3 words separated by spaces, no punctuation, no extra text.\n\n" +
+                            text
+                    }]
+                }]
+            };
+
+            const resp = await fetch(
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + GEMINI_API_KEY,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                }
+            );
+
+            const data = await resp.json();
+            const raw = (data && data.candidates && data.candidates[0] &&
+                data.candidates[0].content &&
+                data.candidates[0].content.parts &&
+                data.candidates[0].content.parts[0].text) || "";
+            return raw;
+        }
+
+        function normalizeToThreeWords(rawText, fallbackSourceText) {
+            let base = rawText && rawText.trim() ? rawText : (fallbackSourceText || "");
+            if (!base) return "";
+            const words = base.trim().split(/\s+/).filter(Boolean);
+            if (words.length === 0) return "";
+            const top3 = words.slice(0, 3);
+            while (top3.length < 3 && words.length > 0) {
+                top3.push(words[0]);
+            }
+            return top3.join(" ");
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const uploadBtn  = document.getElementById("upload-btn");
+            const fileInput  = document.getElementById("pdf-input");
+            const queryInput = document.getElementById("home-query-input");
+            const form       = document.getElementById("search-form");
+
+            if (form && queryInput) {
+                form.addEventListener("submit", () => {
+                    const q = (queryInput.value || "").trim();
+                    if (q) saveSearchHistory(q);
+                });
+            }
+
+            if (uploadBtn && fileInput && queryInput && form) {
+                uploadBtn.addEventListener("click", () => fileInput.click());
+
+                fileInput.addEventListener("change", async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    if (file.type !== "application/pdf") {
+                        alert("Please choose a PDF file.");
+                        return;
+                    }
+
+                    const loadingBox = document.createElement("div");
+                    loadingBox.innerText = "Processing with LLM...";
+                    loadingBox.style =
+                        "position:fixed;top:40%;left:50%;transform:translateX(-50%);" +
+                        "padding:20px 36px;font-size:20px;border-radius:14px;" +
+                        "background:rgba(255,255,255,0.9);box-shadow:0 0 18px rgba(0,0,0,0.25);" +
+                        "backdrop-filter:blur(12px);z-index:9999;";
+                    document.body.appendChild(loadingBox);
+
+                    try {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const text = await extractTextFromPDF(arrayBuffer);
+                        const rawKeywords = await getKeywordsFromLLM(text);
+                        const keywords = normalizeToThreeWords(rawKeywords, text);
+                        queryInput.value = keywords;
+                    } catch (err) {
+                        console.error(err);
+                        alert("Failed to process PDF with LLM.");
+                    }
+
+                    setTimeout(() => {
+                        const q = (queryInput.value || "").trim();
+                        if (q) saveSearchHistory(q);
+                        loadingBox.remove();
+                        form.submit();
+                    }, 2000);
+                });
+            }
+        });
+    </script>
+
+    <!-- Voice input (Web Speech API) -->
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const voiceBtn   = document.getElementById("voice-btn");
+            const queryInput = document.getElementById("home-query-input");
+
+            const SpeechRecognition =
+                window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                if (voiceBtn) voiceBtn.style.display = "none";
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.lang = "en-US";
+            recognition.interimResults = false;
+
+            if (voiceBtn) {
+                voiceBtn.addEventListener("click", () => {
+                    recognition.start();
+                });
+            }
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                queryInput.value = transcript;
+            };
+
+            recognition.onerror = (event) => {
+                console.error("Speech recognition error:", event.error);
+            };
+        });
+    </script>
+
+    <!-- Autocomplete for home page + history -->
+    <script>
+        (function () {
+            function setupSuggest(inputId, boxId) {
+                const input = document.getElementById(inputId);
+                const box   = document.getElementById(boxId);
+                if (!input || !box) return;
+
+                function renderHistory() {
+                    const history = loadSearchHistory();
+                    if (!history || history.length === 0) {
+                        box.style.display = "none";
+                        return;
+                    }
+                    box.innerHTML = "";
+                    history.forEach(q => {
+                        const div = document.createElement("div");
+                        div.textContent = q + "  (History)";
+                        div.addEventListener("click", () => {
+                            input.value = q;
+                            box.style.display = "none";
+                            input.focus();
+                        });
+                        box.appendChild(div);
+                    });
+                    box.style.display = "block";
+                }
+
+                async function updateSuggestions() {
+                    const prefix = input.value.trim();
+                    if (!prefix) {
+                        renderHistory();
+                        return;
+                    }
+
+                    try {
+                        const resp = await fetch("/suggest?prefix=" + encodeURIComponent(prefix));
+                        const arr  = await resp.json();
+                        if (!arr || arr.length === 0) {
+                            box.style.display = "none";
+                            return;
+                        }
+
+                        box.innerHTML = "";
+                        arr.forEach(word => {
+                            const div = document.createElement("div");
+                            div.textContent = word;
+                            div.addEventListener("click", () => {
+                                input.value = word;
+                                box.style.display = "none";
+                                input.focus();
+                            });
+                            box.appendChild(div);
+                        });
+                        box.style.display = "block";
+                    } catch (e) {
+                        box.style.display = "none";
+                    }
+                }
+
+                input.addEventListener("input", updateSuggestions);
+                input.addEventListener("focus", updateSuggestions);
+
+                document.addEventListener("click", (e) => {
+                    if (e.target !== input && !box.contains(e.target)) {
+                        box.style.display = "none";
+                    }
+                });
+            }
+
+            setupSuggest("home-query-input", "home-suggest-box");
+        })();
+    </script>
+
+</body>
+</html>
