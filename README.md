@@ -1,6 +1,7 @@
 # MegaSearch
 
 This repo contains a distributed search engine with self-designed KVS system for storage and Flame service for data processing. 
+Demo Video from Youtube: https://youtu.be/ObH-JEvb5gU
 
 ## Build & Run (via build.sh)
 We have developed an all-in-one deployment service -- `ci_cd/build.sh` for 
